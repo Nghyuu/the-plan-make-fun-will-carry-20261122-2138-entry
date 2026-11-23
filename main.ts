@@ -2,41 +2,40 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "nod
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR;
-if (!outputDir) {
+const outDir = process.env.MAKEFUN_OUTPUT_DIR;
+if (!outDir) {
   throw new Error("MAKEFUN_OUTPUT_DIR is not set");
 }
 
-const entryPath = join(dirname(fileURLToPath(import.meta.url)), "entry.txt");
-if (!existsSync(entryPath)) {
-  throw new Error(`entry.txt not found at ${entryPath}`);
+const here = dirname(fileURLToPath(import.meta.url));
+const src = join(here, "entry.txt");
+
+if (!existsSync(src)) {
+  throw new Error(`entry.txt not found next to main.ts: ${src}`);
 }
 
-const entry = readFileSync(entryPath, "utf8");
-if (entry.trim().length === 0) {
-  throw new Error("entry.txt is empty");
+const text = readFileSync(src, "utf8");
+if (text.trim().length === 0) {
+  throw new Error("entry.txt is empty or whitespace-only");
 }
-const codePoints = [...entry].length;
+
+const srcBytes = statSync(src).size;
+
+const codePoints = [...text].length;
 if (codePoints > 280) {
   throw new Error(`entry.txt is ${codePoints} code points, over the 280 limit`);
 }
 
-mkdirSync(outputDir, { recursive: true });
-const outPath = join(outputDir, "entry.txt");
-copyFileSync(entryPath, outPath);
+mkdirSync(outDir, { recursive: true });
+const dest = join(outDir, "entry.txt");
+copyFileSync(src, dest);
 
-const copied = readFileSync(outPath);
-const original = readFileSync(entryPath);
-if (copied.length !== original.length) {
-  throw new Error(`output size ${copied.length} bytes != source size ${original.length} bytes`);
+const copied = readFileSync(dest, "utf8");
+if (copied !== text) {
+  throw new Error("copied entry.txt does not match the source byte-for-byte");
 }
-if (!copied.equals(original)) {
-  throw new Error("output entry.txt is not byte-identical to source");
-}
-const outCodePoints = [...copied.toString("utf8")].length;
-if (outCodePoints !== codePoints) {
-  throw new Error(`output code points ${outCodePoints} != source ${codePoints}`);
+if (statSync(dest).size !== srcBytes) {
+  throw new Error("copied entry.txt size does not match the source");
 }
 
-console.log(`copied ${copied.length} bytes (${codePoints} code points) to ${outPath}`);
-console.log(`verified output: ${copied.length} bytes, ${outCodePoints} code points, byte-identical`);
+console.log(`copied ${statSync(src).size} bytes, ${codePoints} code points -> ${dest}`);
